@@ -1,0 +1,205 @@
+  
+  
+  %challenge in Gaussian processes, and the challenge in log-summation,
+%1 Sparse Latent Gaussin
+%2 Integral of time decay function
+%3 Stochastic sub-sample 
+\section{Algorithm}
+We now present the model estimation algorithm. The exact inference for our model is computationally infeasible for large data due to the GP likelihood in \eqref{eq:base-rate}, which requires us to compute an $m \times m$ kernel matrix $\K$ and its inverse. When the number of distinct interactions (\ie $m$) is large, the computation is infeasible. Moreover, the calculation of each $\lambda_{\bi_n}(s_n)$ (see \eqref{eq:joint}) needs the triggering kernel from all the previously happened events $\{s_1, \ldots, s_{n-1}\}$ (see \eqref{eq:rate}), and hence is very expensive when the number of observed events (\ie $N$) is large. To scale up to both large $m$ and $N$, we use sparse variational GP framework~\citep{titsias2009variational,hensman2013gaussian} and Jensen's inequality to derive a fully-decomposable model evidence lower bound (ELBO), based on which we develop an efficient stochastic optimization algorithm.   
+	
+\subsection{Fully-Decomposable  Evidence Lower Bound}
+Specifically, to use sparse GP, we first introduce a small set of pseudo inputs $\Z = [\z_1, \ldots, \z_l]$ where $l \ll m$. We denote the values of the latent function $g$ on $\Z$ by $\b = [g(\z_1), \ldots, g(\z_l)]$. Since $g(\cdot)$ is sampled from GP, we have its projection on $\Z$ and $\X_Q$ (the latent factors associated with all the distinct interactions, see \eqref{eq:base-rate}), namely $\b$ and $\g$, jointly  follow a multi-variate Gaussian distribution where the covariance matrix is a kernel matrix on both $\Z$ and $\X_Q$. We can further decompose their joint probability by 
+\begin{align}
+p(\b, \g) = p(\b) p(\g|\b) \label{eq:gp2}
+\end{align}
+where $p(\b) = \N(\b|\0, \K_{ll})$ and $p(\g|\b)$ is a conditional Gaussian distribution, $p(\g|\b) = \N(\g| \K_{ml}\K_{ll}^{-1}\b, \K_{mm} -\K_{ml}\K_{ll}^{-1}\K_{lm})$. Here $\K_{ll}$ is the covariance (kernel) matrix on $\Z$,  $\K_{ml}$ is the cross covariance matrix between $\X$ and $\Z$ where each element $[\K_{ml}]_{rc} = k(\x_{\bj_r}, \z_c)$, and $\K_{lm} = \K^\top_{ml}$. We now can augment the joint probability of our model with the pseudo outputs $\b$, 
+\begin{align}
+&p(S, \g, \b, \Ucal) =   p(\b) p(\g|\b) p(S, \Ucal|\g)  \label{eq:joint2}
+\end{align}
+where $p(S, \Ucal|\g) = \prod_{k}\prod_{i_k} \N(\u^k_{i_k}|0, \I)\prod_{\bi \in Q}\exp\big\{-\int_0^T \lambda_\bi(t)\d t\big\} \prod_{n=1}^N \lambda_{\bi_n}(s_n)$. 
+Note that when we marginalize out $\b$, we recover the original probability \eqref{eq:joint}. Based on \eqref{eq:joint2}, we now construct a variational evidence lower bound to avoid computing the full covariance matrix $\K_{mm}$ and its inverse which are prohibitively expensive for large $m$.  To this end, we introduce a variational posterior for $\b$ and $\g$, 
+\begin{align}
+q(\b, \g) = q(\b)p(\g|\b) \label{eq:posterior}
+\end{align}
+where $q(\b) = \N(\b|\bmu, \bSigma)$ is a Gaussian distribution. To ensure the positive definiteness of $\bSigma$ and to ease computation, we further parameterize $\bSigma$ by its Cholesky decomposition, $\bSigma_\alpha = \L\L^\top$ where $\L$ is a lower triangular matrix. Then we can derive the variational lower bound from
+\[
+\Lcal = \EE_{q(\b,\g)}\big[ \log \frac{p(S, \g, \b, \Ucal)}{q(\b, \g)} \big] .
+\]
+From \eqref{eq:joint2} and \eqref{eq:posterior}, we can see that the conditional Gaussian term $p(\g|\b)$ is cancelled in the fraction inside of the logarithm. This is the key step to reduce the cost, because the conditional covariance is a giant $m \times m$ matrix that includes $\K_{mm}$. We can arrange the terms and obtain
+\begin{align}
+&\Lcal = -\mathrm{KL}(q(\b) \| p(\b)) -\sum_{\bi \in \Q}\sum_{n=1}^N \int_{s_n}^T h_{\bi_n \rightarrow \bi}(t-s_n) \d t\notag \\
+& -T\sum_{\bi \in \Q}\EE_{q}\big[e^{g(\x_\bi)}\big] +\sum_{n=1}^N \EE_{q}\big[ \log\big(\lambda_{\bi_n}(s_n)\big)\big], \label{eq:elbo} %\raisetag{0.32in}
+\end{align}
+where $\mathrm{KL}$ is the Kullback–Leibler divergence. Note that to calculate each expectation term, we do not need to use the full variational posterior $q(\b, \g)$, because it only involves one particular interaction and all the other elements in $\g$ are marginalized out. Take $\EE_{q}\big[e^{g(\x_\bi)}\big]$ for an example. We only need to use $q\big(\b, g(\x_{\bi})\big) = q(\b)p\big(g(\x_{\bi})|\b\big)$ to calculate the expectation. Here $p\big(g(\x_{\bi})|\b\big) = \N\big(g(\x_{\bi})|\bgamma_{\bi}(\b), \sigma^2_{\bi}\big)$ is a scalar conditional Gaussian distribution, where $\bgamma_{\bi}(\b) = \k_{\bi l} \K_{ll}^{-1} \b$, and $\sigma^2_{\bi} = k_{\bi\bi} - \k_{\bi l} \K_{ll}^{-1} \k_{l \bi}$,  $\k_{\bi l} = [k(\x_{\bi}, \z_1), \ldots, k(\x_{\bi}, \z_l)]$ and $\k_{l \bi} =\k_{\bi l}^\top$. Hence it is cheap to compute. 
+
+However, it is still expensive to calculate each log rate function $\log\big(\lambda_{\bi_n}(s_n)\big)$ in \eqref{eq:elbo}. According to $\eqref{eq:rate}$, this is a log summation term, and we have 
+\[
+\log\big(\lambda_{\bi_n}(s_n)\big) = \log\big(\lambda_{\bi_n}^0 + \sum_{j=1}^N \delta(s_j < s_n) h_{\bi_j \rightarrow \bi_n}(\Delta_{nj})\big)
+\]
+where $\delta(\cdot)$ is an indicator function and $\Delta_{nj} = s_n -s_j$. Hence, the complexity is proportional to the number of observed events $N$. When $N$ is large, it is very costly. To address this issue, we can partition the events into mini-batches of size $M$,  $\mathcal{B} = \{B_1, \ldots, B_{N/M}\}$. Then we have $\lambda_{\bi_n}(s_n) = \lambda_{\bi_n}^0 + \frac{M}{N}\sum_{i=1}^M \frac{N}{M}\sum_{j \in B_i}\delta(s_j < s_n) h_{\bi_j \rightarrow \bi_n}(\Delta_{nj})$. We can view the rate as an expectation, $\lambda_{\bi_n}(s_n) = \EE_{p(k)} [X_k^n]$, where $p(k) = \frac{M}{N}$, $k$ can take values from $\{1, \ldots, N/M\}$, and 
+\begin{align}
+X_k^n = \lambda_{\bi_n}^0 + \frac{N}{M}\sum_{j \in B_k}\delta(s_j < s_n) h_{\bi_j \rightarrow \bi_n}(\Delta_{nj}). \label{eq:Xkn}
+\end{align}
+Therefore, we can use Jensen's inequality to obtain 
+\[
+\log\big(\lambda_{\bi_n}(s_n)\big)  = \log(\EE_{p(k)} [X_k^n]) \ge \EE_{p(k)}[ \log(X_k^n)].
+\]
+We substitute this lower bound for each log rate term $\log\big(\lambda_{\bi_n}(s_n)\big)$in \eqref{eq:elbo}, and obtain a fully-decomposable evidence lower bound, 
+\begin{align}
+&\Lcal^f = -\mathrm{KL}(q(\b) \| p(\b)) -\sum_{\bi \in \Q}\sum_{n=1}^N \int_{s_n}^T h_{\bi_n \rightarrow \bi}(t-s_n) \d t\notag \\
+& -T\sum_{\bi \in Q}\EE_{q}\big[e^{g(\x_\bi)}\big] +\sum_{n=1}^N \EE_{ p(k)} \EE_{q}[\log(X_k^n)]. \label{eq:elbo2}
+\end{align}
+In this way, we move most of the summation in each $\log\big(\lambda_{\bi_n}(s_n)\big)$ to the outside of $\log$, leaving a tiny amount of summation (over the mini-batch) inside, \ie $X_k^n$. Based on the fully-decomposed new bound, we can develop efficient stochastic optimization for model estimation.
+\subsection{Stochastic Optimization}
+We aim to maximize the evidence lower bound $\Lcal^f$ in \eqref{eq:elbo2} to estimate the variational posterior $q$, the latent factors and the other parameters. Despite the decomposed form of $\Lcal^f$, it is expensive to compute because of the summation and double summation terms. In order to develop an efficient optimization algorithm, we further partition the distinct interactions $Q$ into mini-batches of size $D$, $\mathcal{Q} = \{Q_1, \ldots, Q_{m/D}\}$. We partition the events into mini-batches of size $F$. Note that we can re-use the previous partition $\mathcal{B}$ or choose a new one. We leave the flexibility here, and denote the event batches by $\mathcal{C} = \{C_1, \ldots, C_{N/F}\}$. Now we arrange $\Lcal^f$ as 
+\begin{align}
+&\Lcal^f = -\mathrm{KL}(q(\b) \| p(\b)) -T\sum_{j} \frac{D}{m}  \sum_{\bi \in Q_j}\frac{m}{D} \EE_{q}\big[e^{g(\x_\bi)}\big]  \notag \\
+& - \sum_{j} \sum_{t} \frac{D}{m} \frac{F}{N}  \sum_{\bi \in Q_j, n \in C_t} \frac{m}{D} \frac{N}{F}  \phi(\bi, \bi_n, s_n)  \notag \\
+& +\sum_{t}\sum_{k} \frac{F}{N} \frac{M}{N} \sum_{n \in C_t, k \in B_k} \frac{N}{F} \EE_{q}\log(X_k^n), 
+\end{align}
+where $\phi(\bi, \bi_n, s_n) =\int_{s_n}^T h_{\bi_n \rightarrow \bi}(t-s_n) \d t $ and $X_k^n$ is defined in \eqref{eq:Xkn}. Then the bound can be viewed as the expectation of a stochastic objective, 
+\begin{align}
+\Lcal^f = \EE_{p(k), p(\alpha), p(v)}[ \tilde{\Lcal}^f_{k,\alpha,v}], \label{eq:expt_elbo}
+\end{align}
+ where $p(v) = \frac{D}{m}$, $v \in \{1, \ldots, m/D\}$, $p(\alpha) = \frac{F}{N}$, $\alpha \in \{1, \ldots, N/F\}$, and 
+\begin{align}
+&\tilde{\Lcal}^f_{k,\alpha,v} = -\mathrm{KL}(q(\b) \| p(\b))-\sum_{\bi \in Q_v, n \in C_\alpha} \frac{m}{D} \frac{N}{F}  \phi(\bi, \bi_n, s_n)   \notag \\
+& -T\sum_{\bi \in Q_v}\frac{m}{D} \EE_{q}\big[e^{g(\x_\bi)}\big] + \sum_{n \in C_\alpha, k \in B_k} \frac{N}{F} \EE_{q}\log(X_k^n). \label{eq:sto_obj} \raisetag{8mm}
+\end{align}
+%where $X_k^z = \e^{g(\x_{\bi_z})} + \frac{N}{M}\sum_{j \in B_k}\delta(s_j < s_z) h_{\bi_j \rightarrow \bi_z}(\Delta_{zj})$.
+ 
+Now, we can develop a stochastic optimization algorithm based on \eqref{eq:expt_elbo}. Each time, we first sample a mini-batch $Q_v$,   $B_k$ and $C_\alpha$, and then compute the gradient of the stochastic bound $\tilde{\Lcal}_{k,\alpha,v}^f$ in \eqref{eq:sto_obj} as an unbiased stochastic gradient of $\Lcal^f$. Note that $\EE_{q}\big[e^{g(\x_\bi)}\big]$ is analytical and so is the gradient. However, the expectation term $\EE_q[\log(X_k^n)]$ is intractable to compute, because the exponential of the latent function value,  $\lambda_{\bi_n}^0 = e^{g(\x_{\bi_n})}$, is inside the log (see \eqref{eq:Xkn}). To address this problem, we  use the reparameterization trick~\citep{kingma2013auto}. We first generate a parameterized sample $\tilde{\b} = \bmu + \L  \boldeta$ where $\boldeta \sim \N(0, \I)$. Then, we generate a parameterized sample for $g(\x_{\bi_n})$, $\tilde{g}_{\bi_n} =\bgamma_{\bi}(\tilde{\b}) + \sigma_\bi \epsilon $ where $\epsilon \sim \N(0, 1)$. We substitute $\tilde{g}_{\bi_n} $ for $g(\x_{\bi_n})$ in each $X_k^n$, and hence can obtain an unbiased stochastic estimate of $\tilde{\Lcal}^f_{k,\alpha,v}$. We then calculate the gradient of that estimate, which will be an unbiased stochastic gradient of $\tilde{\Lcal}_{k,\alpha,v}^f$ and in turn an unbiased stochastic gradient of $\Lcal^f$. Then we can use any stochastic optimization algorithm to maximize $\Lcal^f$, so as to jointly update the variational posteriors $q(\b)$, latent factors $\Ucal$, kernel parameters and the other parameters. The computation of the stochastic gradient (see \eqref{eq:sto_obj})restricts the double summation to be across the mini-batches only, and hence can largely reduces the cost. 
+\subsection{Algorithm Complexity}
+The time complexity of our algorithm is $\Ocal(D_0F_0 + F_0M_0 + (D_0+F_0)l^3)$ where $D_0$, $F_0$ and $M_0$ are the mini-batch sizes of $\mathcal{Q}$, $\mathcal{C}$ and $\mathcal{B}$ respectively. Therefore, the computational cost is proportional to the mini-batch sizes.  The space complexity is $\Ocal(l^2 + \sum_{k=1}^K d_k r_k)$ which is to store the covariance matrix of the pseudo outputs $\b$ and latent factors $\Ucal$. 
+
+\cmt{
+\begin{comment}
+
+Next, to enable scalable inference of the latent GP on the background rates (see \eqref{eq:gp}), we use the sparse variational GP framework~\citep{titsias2009variational,hensman2013gaussian}.  We first introduce $m$ inducing points $\B$ and targets $\b$,  and augment the GP likelihood in \eqref{eq:gp} with $p(\f, \b|\Ucal, \Vcal, \B) = \N([\f;\b]|\0, \C)$ where $\C = [c(\widehat{\X}, \widehat{\X}), c(\widehat{\X}, \B); c(\B, \widehat{\X}), c(\B, \B)]$ where $c(\widehat{\X}, \B)$ is the cross covariance between $\widehat{\X}$ and $\B$. Note that $m$ is much smaller than the number of entries in the data, and if we marginalize out $\b$, we recover $p(\f|\Ucal, \Vcal)$. We can then obtain an augmented model $p(\Zcal, \b, \{\y_\bi, f_{\bi}\}|\Ucal, \Vcal, \B)$ by substituting $\N([\f;\b]|\0, \C)$ for  $\N(\f|\0, c(\widehat{\X}, \widehat{\X}))$ in the joint probability \eqref{eq:joint}.
+
+Following~\citep{hensman2013gaussian}, we define a variational posterior $q(\f,\b) = q(\b) p(\f|\b)$ where $q(\b) = \N(\b|\bmu, \bSigma)$ and $p(\f|\b)$ is the conditional Gaussian distribution obtained from their joint prior $p(\f, \b|\Ucal, \Vcal, \B)$. We then combine with $q(\Zcal) = \prod_{\bi, \bj} q(\z_{\bi\rightarrow \bj})$, and follow the standard framework to derive a decomposable variational lower bound of the model evidence, 
+$\Lcal = \expt{q(\b)}{\log\frac{p(\b)}{q(\b)}} + \sum_{\bi, \bj} \EE_{q(\z_{\bi \rightarrow \bj})} \big[\log\frac{p(z_{\bi \rightarrow \bj})}{q(z_{\bi \rightarrow \bj})}\big]  -\sum_{\bi}\expt{q(\Zcal), q(f_\bi, \b)}{\int_{0}^T \lambda_\bi(t) \d t} + \sum_{n=1}^N \EE_{q(\Zcal), q(f_\bi, \b)} \big[\log\big(\lambda_{\bi_n}(s_n)\big)\big]$
+where $q(f_\bi, b) = q(\b)p(f_\bi|\b)$. Here $p(f_\bi|\b) = \N(f_\bi|\eta_\bi,  \sigma^2_\bi)$
+where $\eta_\bi = c([\x_\bi, \tilde{\x}_\bi], \B)c(\B,\B)^{-1}\b$ and $\sigma_\bi^2 = c([\x_\bi, \tilde{\x}_\bi], [\x_\bi, \tilde{\x}_\bi]) - c([\x_\bi, \tilde{\x}_\bi], \B)c(\B,\B)^{-1}c(\B, [\x_\bi, \tilde{\x}_\bi])$.
+
+To handle both large numbers of tensor entries and interaction events, we  randomly partition the tensor entries, entry pairs and the observed events into mini-batches $\{O_l\}$, $\{Q_t\}$ and $\{N_k\}$, according to which we arrange our variational bound as the expectation of a stochastic bound, $\Lcal = \expt{p(t),p(l),p(k)}{\tilde{\Lcal}_{t,l,k}}$, where $p(t) = \frac{|Q_t|}{M^2}, p(l) = \frac{|O_l|}{M}, p(k) = \frac{|N_k|}{N}$, and 
+\begin{align}
+&\tilde{\Lcal}_{t,l,k} = \sum_{(\bi,\bj) \in Q_t}\frac{M^2}{|Q_t|} \expt{z_{\bi \rightarrow \bj}}{\log\frac{p(z_{\bi \rightarrow \bj})}{q(z_{\bi \rightarrow \bj})}} -\sum_{\bi \in O_l}\frac{M}{|O_l|}\expt{q(\Zcal), q(f_\bi, \b)}{\int_{0}^T \lambda_\bi(t) \d t} \notag\\
+&+\sum_{n \in N_k}\frac{N}{|N_k|} \expt{q(\Zcal), q(f_\bi, \b)} {\log\big(\lambda_{\bi_n}(s_n)\big)} + \expt{q(\b)}{\log\frac{p(\b)}{q(\b)}}. \label{eq:st-elbo}
+\end{align}
+\cmt{
+To handle both large numbers of tensor entries and interaction events, we develop a stochastic optimization algorithm for $\Lcal$. Specifically, we randomly partition the entries, entry pairs and the observed events into mini-batches $\{O_l\}$, $\{Q_t\}$ and $\{N_k\}$, according to  which we arrange the variational bound as 
+\begin{align}
+&\Lcal =  \sum_{t}\frac{|Q_t|}{M^2}\sum_{(\bi,\bj) \in Q_t}\frac{M^2}{|Q_t|} \expt{z_{\bi \rightarrow \bj}}{\log\frac{p(z_{\bi \rightarrow \bj})}{q(z_{\bi \rightarrow \bj})}} -\sum_{l}\frac{|O_l|}{M}\sum_{\bi \in O_l}\frac{M}{|O_l|}\expt{q(\Zcal), q(f_\bi, \b)}{\int_{0}^T \lambda_\bi(t) \d t} \notag \\
+&+\sum_k\frac{|N_k|}{N}\sum_{n \in N_k}\frac{N}{|N_k|} \expt{q(\Zcal), q(f_\bi, \b)} {\log\big(\lambda_{\bi_n}(s_n)\big)} + \expt{q(\b)}{\log\frac{p(\b)}{q(\b)}}. 
+\end{align} 
+The bound can therefore be considered as the expectation of a stochastic bound, $\Lcal = \expt{p(t),p(l),p(k)}{\tilde{\Lcal}_{t,l,k}}$, where $p(t) = \frac{|Q_t|}{M^2}, p(l) = \frac{|O_l|}{M}, p(k) = \frac{|N_k|}{N}$, and 
+\begin{align}
+&\tilde{\Lcal}_{t,l,k} = \sum_{(\bi,\bj) \in Q_t}\frac{M^2}{|Q_t|} \expt{z_{\bi \rightarrow \bj}}{\log\frac{p(z_{\bi \rightarrow \bj})}{q(z_{\bi \rightarrow \bj})}} -\sum_{\bi \in O_l}\frac{M}{|O_l|}\expt{q(\Zcal), q(f_\bi, \b)}{\int_{0}^T \lambda_\bi(t) \d t} \notag\\
+&+\sum_{n \in N_k}\frac{N}{|N_k|} \expt{q(\Zcal), q(f_\bi, \b)} {\log\big(\lambda_{\bi_n}(s_n)\big)} + \expt{q(\b)}{\log\frac{p(\b)}{q(\b)}}.
+\end{align}
+}
+We can therefore maximize $\Lcal$ with stochastic optimization. Each time, we sample three mini-batches, $Q_t$, $O_l$ and $N_k$ for tensor entries, entry pairs and the interaction events respectively, and optimize the stochastic bound $\tilde{\Lcal}_{t,l,k}$ to update the latent factors and the variational posteriors. 
+
+%Given the stochastic bound $\tilde{\Lcal}_{t,l,k}$,
+ However, there remains a hurdle ---  all the expectation terms except $\expt{q(\b)}{\log\frac{p(\b)}{q(\b)}}$ in the stochastic bound (see \eqref{eq:st-elbo}) are not analytical due to the complicated integrands (see the definition of $q(z_{\bi \rightarrow \bj})$ in \eqref{eq:concrete} and $\lambda_\bi(t)$ in \eqref{eq:rate}).  Hence we cannot  compute the gradient of $\tilde{\Lcal}_{t,l,k}$ for optimization. To address this issue, we further use the reparameterization trick to compute a stochastic gradient of the stochastic variational bound  $\tilde{\Lcal}_{t,l.k}$, based on which we jointly update the variational posteriors $\{q(\Zcal), q(\b)\}$, the dual factors $\{\Ucal. \Vcal\}$, the inducing points $\B$ and other parameters such as the kernel parameters. We refer to our approach as a nested stochastic variational Expectation-Maximization (EM) algorithm, where the E and M steps are performed jointly. Specifically, for each entry pair $(\bi, \bj)$ in the stochastic bound, we sample a noise variable $\epsilon_{\bi\rightarrow \bj}$ from the standard logistic distribution, $p(\epsilon_{\bi\rightarrow \bj} ) = {\exp(-\epsilon_{\bi\rightarrow \bj})}/{(1 + \exp(-\epsilon_{\bi\rightarrow \bj}))^2}$. Then, we construct a parameterize sample, $z^*_{\bi\rightarrow \bj} = {1}/\big[{1 + \exp\big(-\frac{1}{\tau}(\log(\pi_{\bi \rightarrow \bj}) - \log(1 - \pi_{\bi \rightarrow \bj}) + \epsilon_{\bi\rightarrow \bj})\big)}\big].$
+%\[
+ %z^*_{\bi\rightarrow \bj} = \frac{1}{1 + \exp\big(-\frac{1}{\tau}(\log(\pi_{\bi \rightarrow \bj}) - \log(1 - \pi_{\bi \rightarrow \bj}) + \epsilon_{\bi\rightarrow \bj})\big)}.
+ %\]
+ It can be shown that $z^*_{\bi \rightarrow \bj}$ is a sample of $q(z_{\bi \rightarrow \bj})$. Similarly, for each entry $\bi$ in $\tilde{\Lcal}_{t,l,k}$, we generate parameterized samples $\{f_\bi^*, \b^*\}$ from $q(f_\bi, \b)$. Specifically, we sample a standard Gaussian noise $\bxi$, and set $\b^* = \bmu + \L \bxi$. To generate $f_\bi^*$, we first derive the marginal posterior $q(f_\bi) = \N(f_\bi|\hat{\eta}_\bi, \hat{\sigma}_\bi^2)$, where $\hat{\eta}_\bi = c([\x_\bi, \tilde{\x}_\bi], \B)c(\B,\B)^{-1}\bmu$ and $\hat{\sigma}_\bi^2 = \sigma_\bi^2 + c([\x_\bi, \tilde{\x}_\bi], \B)c(\B,\B)^{-1}\bSigma c(\B,\B)^{-1} c(\B, [\x_\bi, \tilde{\x}_\bi])$. Then we sample a noise $\xi$ from $\N(\xi|0, 1)$ and set $f_\bi^*= \hat{\eta}_\bi + \hat{\sigma}_\bi \xi$. Now we remove all the the expectation operations in $\tilde{\Lcal}_{t,l,k}$, and replace the latent random variables by their parameterized samples. Then we obtain an unbiased estimation of $\tilde{\Lcal}_{t,l,k}$, which we denote  by $\tilde{\Lcal}_{t,l,k}^*$. Note that $\EE(\tilde{\Lcal}_{t,l,k}^*) = \tilde{\Lcal}_{t,l,k}$ and $\EE(\tilde{\Lcal}_{t,l,k}) = \Lcal$. 
+ We then compute the gradient of $\tilde{\Lcal}_{t,l,k}^*$, and update all the parameters $\btheta$ by $\btheta \leftarrow \btheta + \eta \frac{\partial \tilde{\Lcal}_{t,l,k}^*}{\partial \btheta}$, where $\eta$ is the learning rate and can be adjusted dynamically. We repeatedly sample the mini-batches, generate parameterized samples, and compute the stochastic gradient for updates, until convergence or the maximum number of iterations have been finished. 
+ 
+ %We implement our algorithm with TensorFlow, which can automatically finish the tedious gradient computation. 
+\end{comment}
+
+
+Sparse Gaussian:
+Augment the model using Sparse Gaussian Framework.
+Introduce inducing input $B$ and target $\alpha$ for Gaussian Process $f(\x_i)$.
+
+We still put a Gaussian process over $\alpha$. The posterior of $\alpha$ 
+$$q(\alpha) = \N( \alpha | \mu_\alpha, \bSigma_\alpha)$$
+$$\bSigma_\alpha = L_\alpha L_\alpha^T$$
+
+Where $L_\alpha$ is a lower triangle matrix by Cholesky decomposition. We also assume that the joint posterior $q( f,\alpha)$ factorized as
+\begin{equation}
+q(f,\alpha) = q(\alpha) p( f| \alpha) \label{eq:fac_post}
+\end{equation}
+
+
+Denote parameters other than embedding $\Ucal$ as $\Theta$, which includes all the kernel parameters, the likelihood function writes:
+$$
+p( D, f, \alpha | \Ucal, \Theta) = p( \alpha) p(f | \alpha) p( D | f, \Ucal, \Theta)
+$$
+
+
+By variational inference,
+\begin{align*}
+ELBO &= ELBO( \Ucal, \Theta)\\
+	 &= < \frac{p( D, f, \alpha | \Ucal, \Theta)}{q(f,\alpha)} >_{ q(f,\alpha)}\\
+	 &= < \log p( D | f, \Ucal, \Theta) >_{q( f, \alpha)} + < \log \frac{p(f)}{p(\alpha)}>_{ q(\alpha)}\\
+	 &= < \log p( D | f, \Ucal, \Theta) >_{q( f, \alpha)} - KL( q(\alpha) || p(\alpha))
+\end{align*}
+We task is now to maximize ELBO w.r.t. $\Ucal, \Theta$ \label{eq:opt_ELBO}
+\begin{align}
+	\max_{\Ucal, \Theta} < \log p( D | f, \Ucal, \Theta) >_{q( f, \alpha)} - KL( q(\alpha) || p(\alpha))
+\end{align} 
+
+The second term of ELBO is
+\begin{align}
+KL( q || p) &= \frac{1}{2}tr( K_{mm}^{-1} ( \bSigma_\alpha + \mu_a \mu_\alpha^T)) - \frac{m}{2} \notag \\
+&+ \frac{1}{2} \log det ( K_{mm}) - \vert \sum_i diag( L_\alpha) \vert \label{eq:KL}
+\end{align}
+where $K_{mm}$ is the kernel matrix for the m inducing points of B and m is the total number of inducing points.
+
+
+\subsection{Calculation of log likelihood under posterior}
+Since there is not simple closed form solution to the first term of ELBO, \eg the expectation of likelihood under posterior $q(f, \alpha)$. We have to resort to approximation scheme.
+
+\subsubsection{Stochastic Optimization}
+To avoid calculating the closed form of expectation, we adopt a stochastic optimization to maximize ELBO\eqref{eq:opt_ELBO}. For each optimization step, instead of calculating the gradient of the expectation, we first sample an instance of $f$ according to the current posterior $q(f,a)$, then calculate the gradient of $ \log p( D | f, \Ucal, \Theta)$ and use this gradient as the approximation to the gradient of expectation term. Since we could switch the order of gradient and expectation, this gradient approximation is naturally unbiased.
+\begin{align*}
+	\EE \nabla \log p( D | f, \Ucal, \Theta) &=  \nabla \EE \log p( D | f, \Ucal, \Theta)\\
+	&= \nabla < \log p( D | f, \Ucal, \Theta) >_{q( f, \alpha)}
+\end{align*}
+
+\subsubsection{ Approximation to log likelihood}
+According to \eqref{eq:joint}, the log likelihood given all parameters writes
+\begin{align}
+	& \log p( D | f, \Ucal, \Theta) \notag\\
+	&= -\sum_{\bi}\int_{T_0}^{T_1}\lambda_{\bi}(t)dt + \sum_{n}^{N} \log \lambda_{\bi_n}(t_n) \label{eq:log_llk}
+\end{align}
+
+\paragraph{Integral Terms}For the first part, the summation of integral, each integral could be solved analytically, so as it gradient
+\begin{align}
+	&\int_{T_0}^{T_1}\lambda_{\bi}(t)dt \notag \\
+	&=\int_{T_0}^{T_1} \sum_{t_n < t}^N k_1( \x_{\bi_n}, \x_{\bi}) e^{- \delta_{\bi} ( t - t_n)} \notag \\
+	&= \sum_{n}^{N} \int_{0}^{T_1 - t_n} k_1( \x_{\bi_n}, \x_{\bi})  e^{- \delta_{\bi} ( t - t_n)} \notag\\
+	&= \sum_{n}^{N} \frac{ k_1( \x_{\bi_n}, \x_{\bi})}{ \delta_{\bi}}( 1 - e^{ -\delta_{\bi}( T_1 - t_n)}) \label{eq:int_term}
+\end{align} 
+Where $\delta_{\bi} = \frac{1}{k_1( \x_{\bi_n}, \x_{\bi})}$ is the time decay rate for each interaction. 
+
+\paragraph{Consistent Gradient Estimator}For the summation of log intensity rate $\log \lambda_{\bi_n}(t_n)$ when each event happened, without further treatment, calculating each $\log \lambda_{\bi_n}(t_n)$ will involve with the whole event sequence $D$, which is computationally intractable when dealing with reasonably large data set. So we resort to an biased but consistent gradient estimator for this term.
+Note that if we assign a uniform probability to each summation element in \eqref{eq:rate}, we could treat the rate as an expectation over uniform distribution of event $n$.
+\begin{align}
+\lambda_\bi(t) &= \lambda_\bi^0 + N \sum_{n} \frac{1}{N} h_{\bi_n \rightarrow \bi}I(t_n < t)(t-t_n) \notag \\
+			   &= \lambda_\bi^0 + N \EE( h_{\bi_n \rightarrow \bi}I(t_n < t)(t-t_n)) \notag\\
+			   &= \EE(  \lambda_\bi^0 + N h_{\bi_n \rightarrow \bi}I(t_n < t)(t-t_n))
+\end{align}
+
+Then suppose we treat the above expectation in term of batches of events, in each optimization iteration, we could approximate $log \lambda_{\bi_n}(t_n)$ by
+\begin{equation}
+\nabla \log \lambda_{\bi_n}(t_n) \approx \nabla \log \tilde{\lambda}_{\bi_n}(t_n) \label{eq:sub_log}
+\end{equation}
+
+$$ \tilde{\lambda}_{\bi_n}(t_n)= \lambda_\bi^0 + \frac{N}{\vert |B_n|\vert} \sum_{n' \in B_n} h_{\bi_n' \rightarrow \bi}I(t_n' < t_n)(t_n-t_n')$$
+which corresponds one outcome of rate function of one sample from uniform event distribution.
+
+By Jensen's inequality:
+$$ log( \EE X) \le \EE log(X)$$
+The above gradient estimator \eqref{eq:sub_log} is biased. But it is a consistent gradient estimator as if increase the batch size it will converge to the true gradient. According to *cite(consistent estimator), using it in stochastic optimization scheme will still guarantee convergence.  
+
+\subsection{Algorithm Complexity}
+In each stochastic optimization step, the complexity to compute the gradient is $O( N_i * N_e1 + N_e1 * N_e2 )$
+where $N_i$, $N_e1$ are the batch sizes of interactions and events in calculate the integral terms in \eqref{eq:log_llk} and \eqref{eq:int_term}. $N_e1$ and $N_e2$ are the batch sizes of events in \eqref{eq:log_llk} and \eqref{eq:sub_log}.
+}

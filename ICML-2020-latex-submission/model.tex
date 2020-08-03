@@ -1,0 +1,164 @@
+%\vspace{-0.1in}
+\section{Background}
+%\vspace{-0.1in}
+\textbf{Tensor Factorization.} We denote a $K$-mode tensor by $\Ycal \in \mathbb{R}^{d_1 \times \ldots \times d_K}$. The $k$-th mode includes $d_k$ entities or nodes (\eg customers).  Each entry is indexed by a tuple $\bi = (i_1, \ldots, i_K)$ and stands for the interaction of the corresponding $K$ nodes.  The entry value is denoted by $y_{\bi}$. To decompose $\Ycal$, we  introduce $K$ latent factor matrices $\Ucal = \{\U^1, \ldots, \U^K\}$ to represent all the tensor nodes. Each $\U^k =[\u^k_1; \ldots ; \u^k_{d_k}]^\top$, which is $d_k \times r_k$, and each $\u^k_t$ are the $r_k$ latent factors of node $t$ in mode $k$. We aim to use $\Ucal$ to recover the observed entries in $\Ycal$. A classical approach is Tucker decomposition~\citep{Tucker66}, which assumes $\Ycal = \Wcal \times_1 \U^{1} \times_2 \ldots \times_K \U^{K}$, where  $\mathcal{W} \in \mathbb{R}^{r_1 \times \ldots \times r_K}$ is a parametric tenor,  and $\times_k$ is the mode-$k$ tensor matrix product~\citep{kolda2006multilinear}, which resembles the ordinary matrix-matrix product.
+If we set all $r_k = r$ and $\Wcal$ to be diagonal, Tucker decomposition becomes  CANDECOMP/PARAFAC (CP) decomposition~\citep{Harshman70parafac}. While numerous tensor factorization methods have  been proposed, \eg  ~\citep{Chu09ptucker,kang2012gigatensor,choi2014dfacto}, most of them are inherently based on the CP or Tucker form. However, since both forms are mutilinear to the latent factors, they are incapable of capturing more complicated, nonlinear relationships in data.
+
+\textbf{Factorization with Temporal Information.} Real-world tensors are often supplemented with detailed temporal information, namely, the timestamps of the observed interactions.
+
+To incorporate these information, traditional methods either  drop the timestamps  to perform count tensor decomposition~\citep{chi2012tensors, Hu2015CountTensor}, or  discretize the timestamps into time steps, \eg weeks or months,  augment the tensor with a time mode~\citep{xiong2010temporal, schein2015bayesian, Schein:2016:BPT:3045390.3045686}, and jointly estimate the time factors. Both approaches can be viewed as using Poisson processes to model the interaction events, $p(y_\bi) \propto e^{-\lambda_{\bi}T}\lambda_{\bi}^{y_\bi}$,  where $y_\bi$ is the interaction count in entry $\bi$ (with/without a time step), and $\lambda_{\bi}$ is the event rate.  The factorization is performed on $\{\lambda_{\bi}\}$ or $\{\log(\lambda_{\bi})\}$, typically with Tucker/CP forms. 
+Despite their simplicity and convenience, these methods disregard the rich and vital temporal dependencies between the interactions, due to the independent increment assumption in Poisson processes.  To mitigate this issue, \citet{zhe2018stochastic} formulated \textit{event-tensor} to maintain all the accurate timestamps. In an event-tensor, each entry is an event sequence of a particular interaction, rather than a numerical value. \citet{zhe2018stochastic} modelled the observed entries as a set of mutually excited Hawkes processes~\citep{hawkes1971spectra}. The rate of the events in each entry  $\bi$ is
+\begin{align}
+\lambda_\bi(t) = \lambda_\bi^0 + \sum\nolimits_{s_n \in A(t)} k(\x_{\bi_n},\x_{\bi})h_0(t-s_n) \label{eq:rate-1}
+\end{align}
+where $\lambda_\bi^0$ is the background rate, $A(t)$ is a local time window that specifies the range of dependent events happened before $t$ (\eg  $50$ past events nearest to $t$), $\bi_n$ is the entry which the previous interaction at time $s_n$ belongs to, $\x_{\bi_n}$ and $\x_{\bi}$ are the latent factors associated with entry $\bi_n$ and $\bi$ respectively, $k(\cdot, \cdot)$ is a kernel function that measures their similarity, and $h_0(\cdot)$ is a base triggering kernel that measures how the triggering effect decays along with time. From the rate function \eqref{eq:rate-1}, we can see that the model can capture the (local) excitation effects of the previously happened interactions on the current one, and the triggering strength are (partly) encoded into the latent factors --- the closer the corresponding factors of the two entries, the stronger the strength. 
+
+\section{Model}
+%\vspace{-0.05in}
+Although \citet{zhe2018stochastic}'s model can capture fine-grained, mutual triggering effects among the interactions, it ignores another important class of temporal influence --- \textit{inhibition}. The inhibition effect between the events are ubiquitous in real world. For example, a customer who has recently purchased a Surface laptop is unlikely to buy an MacBook; people who voted for one president candidate are unlikely to support another candidate in a short term. In practice, among the interaction events can be mixed excitation and inhibition effects, resulting in complex temporal dependencies. In addition, the model uses a local time window $A(t)$ to specify a small range of the dependent events for each interaction (see \eqref{eq:rate-1}). Although this can save much computational cost for the rate function and its logarithm in model estimation (especially for a large number of events),  it excludes all the long-term  influences of the interaction events on each other, and hence can miss many interesting and valuable temporal patterns. To overcome these problems, we propose a self-modulating nonparametric Bayesian event-tensor factorization model, presented as follows.
+
+\subsection{Notations for Event-Tensor}
+
+First, let us supplement a few notations. In the event-tensor, for each observed entry $\bi$, we denote its event sequence by $y_{\bi} = [s_\bi^1, \ldots, s_\bi^{n_\bi}]$, \ie the time stamps the interaction $\bi$ occurred, and $n_\bi$ is the number of occurrences. Note that each entry represents a particular type of interaction. We can merge the event sequences of all the observed entries into a single sequence, $S = [(s_1, \bi_1). \ldots, (s_N, \bi_N)]$, where $s_1 \le \ldots \le s_N$ are all the time stamps, each $\bi_n$  indexes the entry that event $s_n$ belongs to, \ie the particular interaction occurred at $s_n$. 
+%\vspace{-0.1in}
+\subsection{Self-Modulating Nonparametric Factorization}
+%\vspace{-0.05in}
+%the motivation to introduce the g func. 
+We now consider to use the latent factors $\Ucal$ to construct a general random point process to accommodate  both the triggering and inhibition effects among the interaction events. One basic assumption in \citep{zhe2018stochastic}  (see \eqref{eq:rate-1}) is that the closer (or more similar) the factor representations of two interactions, the stronger their mutual excitation effects. This is true in many applications, for example, ``the event that \textit{user} A purchased \textit{commodity} B may excite A's friend C to purchase B as well''. Obviously, the factors of A and C are expected to be close because they are in the same community (\ie friends) and so are the factor representations for the interactions (A, B) and (C, B).  However, in many other cases,  closer factor representations may on the contrary lead to stronger inhibition effects. For example, the event that user A has purchased Surface laptop B can strongly suppress A to buy MacBook C (aforementioned); the event that athlete A has won the champion of Game B deprives of the possibility that his competitor C wins B. Therefore, to model the strength of the temporal influence of a previously occurred interaction $\bj$ on the current one $\bi$, we still use a kernel function of their factor representations, $k(\x_{\bj}, \x_{\bi})$, where
+$\x_{\bi} = [\u^1_{i_1}; \ldots; \u^K_{i_K}]$ and $\x_{\bj} = [\u^1_{j_1}; \ldots; \u^K_{j_K}]$. However, to detect the type of the influence, we consider to learn a discriminative function of the factor representations, $g(\x_{\bj}, \x_{\bi})$, where $g(\x_{\bj}, \x_{\bi})>0$ indicate that $\bj$ will trigger the occurrence of $\bi$ and otherwise inhibit. To flexibly estimate $g(\cdot)$, we place a Gaussian process (GP) prior~\citep{Rasmussen06GP} --- a nonparametric function prior that accommodates various complex functions. Hence, the latent function values $\g$ for every pair of observed entries will follow a multivariate Gaussian distribution, 
+\begin{align}
+p(\g|\Ucal) = \N\big(\g|\0, \kappa_g(\X_g, \X_g)\big), \label{eq:gp-g}
+\end{align}
+where each row of the input matrix $\X_g$ corresponds to a pair of entries, and are the concatenation of the associated factors, $\kappa_g(\cdot, \cdot)$ is the covariance (kennel) function. 
+
+Now, we define a raw rate function for each entry $\bi$ that integrates both the triggering and suppressing effects from the previous interactions, 
+\begin{align}
+&\tlam_{\bi}(t) = \lambda_\bi^0 \notag \\
+&+\sum_{s_n<t} \mathrm{tanh}\big(g(\x_{\bi_n} ,\x_\bi)\big)k(\x_{\bi_n} , \x_{\bi})h_0(t-s_n)   \label{eq:raw-rate}
+\end{align}
+where $\lambda_\bi^0$ is the background rate and $h_0(\cdot)$ is a base kernel that describes the how the strength of the influence decays with time. In our experiments, we chose the commonly used exponential decay kernel, $h_0(\Delta)=\exp(-\frac{\Delta}{\tau})$. Note that we use $\mathrm{tanh}(\cdot)$ to squeeze the values of $g(\cdot)$ into $[-1, 1]$ without changing the sign. The reason is that we use $g(\cdot)$ to just determine the influence types (excitation or inhibition); for clear interpretability, we do not want to confound it with the influence strength (which are modelled by the other components, \ie $k(\cdot, \cdot)$ and $h_0(\cdot)$). 
+
+Next, to obtain a positive rate function so as to build a valid point process, we use a scaled soft-plus function $\gamma_s(\cdot)$ to transform the raw rate $\tlam_{\bi}(t)$, 
+\begin{align}
+\lambda_{\bi}(t) =\gamma_s\big(\tlam_{\bi}(t)\big) = s \log\big(1 + \exp(\frac{\tlam_{\bi}(t)}{s})\big) \label{eq:rate}
+\end{align}
+where $s>0$. It is trivial to show that when $s \rightarrow \infty$,  $\lambda_\bi(t)  \rightarrow \max\big(\tlam_\bi(t), 0\big)$. Therefore, the scaled soft-plus can considerably maintain the additive structure in our raw rate definition in \eqref{eq:raw-rate}. While other transformation operators are also possible, \eg $\exp(\cdot)$, we found empirically that the scaled softplus exhibits superior and excellent performance.
+
+Finally, to estimate the complex yet static relationships between the entities and fuse the relationships into the latent factors, we model the background rate $\lambda_\bi^0$ in each entry $\bi$ as a nonlinear function of the associated factors, $f(\x_{\bi})$. To this end, we place another GP prior over $f(\cdot)$. Then the background rate values $\f$ for all the observed entries are sampled from a multivariate Gaussian distribution,
+\begin{align}
+p(\f|\Ucal) = \N\big(\f|\0, \kappa_f(\X_f, \X_f)\big), \label{eq:gp-f}
+\end{align} 
+where each row of $\X_f$ are the concatenated factors associated with one entry, and $\kappa_f(\cdot,\cdot)$ is the covariance (or kernel) function. Note that we do not need to constrain $f(\cdot)>0$, because via the soft-plus transformation \eqref{eq:rate}, we will always obtain a non-negative event rate. 
+
+We place a standard Gaussian prior over all the latent factors $\Ucal$. Given the observed interaction events $\Scal$ (from all the entries), the joint probability of our model is given by 
+\begin{align}
+&p(\Scal, \g, \f, \Ucal) = \prod_k\prod_{i_k} \N(\u_{i_k}^k|\0, \I) \notag \\
+&\cdot \N\big(\g|\0, \kappa_g(\X_g, \X_g)\big) \N\big(\f|\0, \kappa_f(\X_f, \X_f)\big) \notag \\
+&\cdot \prod_{\bi} \exp\big(-\int_0^T \lambda_{\bi}(t)\d t\big) \prod_{n=1}^N \lambda_{\bi_n}(s_n) \label{eq:joint}
+\end{align}
+where $T$ is the total time span across all the events. Note that the last row is the likelihood of our proposed mutually governed, general random point process on the observed entries~\citep{daley2007introduction}.
+\vspace{-0.1in}
+\section{Algorithm}
+\vspace{-0.05in}
+The estimation of our model is challenging. First, the exact inference of our model is infeasible for large data because the GP likelihoods \eqref{eq:gp-g} and \eqref{eq:gp-f} requires us to compute $M^2 \times M^2$ and $M \times M$ covariance (kernel) matrices respectively and their inverse, where $M$ is the number of observed entries (\ie distinct interactions). When $M$ is large, the computation is prohibitively costly. Second, the calculation of each rate $\lambda_{\bi_n}(s_n)$ in the joint probability \eqref{eq:joint} needs to go through all the previously happened interactions $\{s_1, \ldots, s_{n-1}\}$ (see \eqref{eq:raw-rate}), and therefore is expensive for a  large number of events $N$. Third, due to the softplus transformation in \eqref{eq:rate}, the integral over each rate function in \eqref{eq:joint} does not have a closed form and is intractable to compute.  
+
+To address these challenges, we take advantage of the variational sparse GP framework~\citep{hensman2013gaussian} and the properties of our rate function to derive a fully decomposed model evidence lower bound (ELBO). Based on the ELBO, we develop a stochastic, mini-batch optimization algorithm that are efficient to both large $M$ and $N$. Our algorithm is presented as follows.  
+
+%sparse GP, and ELBO ==> convexity and log-cavity ==> fully additive ELBO
+\vspace{-0.1in}
+\subsection{Fully Decomposed Model Evidence Lower Bound}
+\vspace{-0.05in}
+First, to use the variational sparse GP, we introduce pseudo inputs $\Z_g = [\z^g_{1}, \ldots, \z^g_{m_g}]^\top$ and $\Z_f = [\z^f_{1}, \ldots, \z^f_{m_f}]^\top$ for the two latent functions $g(\cdot)$ and $f(\cdot)$, respectively, where $m_g \ll M^2$ and $m_f \ll M$. We denote the function values at these pseudo inputs by $\b_g = [g(\z^g_1), \ldots, g(\z^g_{m_g})]^\top$ and $\b_f = [f(\z^f_1), \ldots, f(\z^f_{m_f})]$, which we refer to as the pseudo outputs. 
+Then we can augment our model by jointly sampling $\{\f, \b_f\}$ and $\{\g, \b_g\}$. Due to the GP priors of $g(\cdot)$ and $f(\cdot)$, both $\{\g, \b_g\}$ and $\{\f, \b_f\}$ follow a multivariate Gaussian distribution, and the covariance (kernel) matrices are computed on $\{\X_f,\Z_f\}$ and $\{\X_g, \Z_g\}$, respectively. We can further decompose the joint prior by
+\begin{align}
+p(\g, \b_g) = p(\b_g) p(\g|\b_g) \label{eq:prior-aug-g}
+\end{align}
+where $p(\b_g) = \N\big(\b_g|\0, \kappa_g(\Z_g, \Z_g)\big)$, $p(\g|\b_g) = \N(\g|\m_{g|b}, \bSigma_{g|b})$ is a conditional Gaussian distribution,   $\m_{g|b} = \kappa_g(\X_g, \Z_g)\kappa_g(\Z_g, \Z_g)^{-1}\b_g$ and $\bSigma_ {g|b} = \kappa_g(\X_g, \X_g) - \kappa_g(\X_g, \Z_g)\kappa_g(\Z_g, \Z_g)^{-1}\kappa_g(\Z_g, \X_g)$. Similarly, we can decompose %$p(\f, \b_f) = p(\b_f) p(\f|\b_f)=  \N\big(\b_f|\0, \kappa_f(\Z_f, \Z_f)\big)\N(\f|\bmu_f, \bSigma_f)$
+\begin{align}
+&p(\f, \b_f) = p(\b_f) p(\f|\b_f) \label{eq:prior-aug-f} \\
+&=  \N\big(\b_f|\0, \kappa_f(\Z_f, \Z_f)\big)\N(\f|\m_{f|b}, \bSigma_{f|b}) \notag
+\end{align}
+where $\m_{f|b}$ and $\bSigma_{f|b}$ are the conditional mean and covariance matrix given $\b_f$ respectively, similar to $\m_{g|b}$ and $\bSigma_{g|b}$. The joint probability of the augmented model is then
+\begin{align}
+&p(\Scal, \g, \b_g, \f, \b_f, \Ucal) \notag \\
+&= p(\b_g)p(\g|\b_g) p(\b_f)p(\f|\b_f)  p(\Ucal, \Scal|\f, \g) \label{eq:aug-joint}
+\end{align}
+where $p(\Ucal, \Scal|\f, \g) = \prod_k\prod_{i_k} \N(\u_{i_k}^k|\0, \I)\prod_{\bi} \exp\big(-\int_0^T \lambda_{\bi}(t)\d t\big) \prod_{n=1}^N \lambda_{\bi_n}(s_n)$. Note that if we marginalize out the pseudo outputs $\b_g$ and $\b_f$, we will recover the original model \eqref{eq:joint}. Based on \eqref{eq:aug-joint}, we now construct a variational model evidence lower bound (ELBO) to avoid calculating the full covariance matrices $\kappa_g(\X_g, \X_g)$ and $\kappa_f(\X_f, \X_f)$, which is infeasible for large $M$. To do so, we introduce a variational posterior for $\{\g, \b_g, \f, \b_f\}$, 
+\begin{align}
+q(\g, \b_g, \f, \b_f) = q(\b_g)p(\g|\b_g) q(\b_f) p(\f|\b_f), \label{eq:post}
+\end{align}
+where $q(\b_g) = \N(\b_g|\bmu_g, \S_g)$ and $q(\b_f) = \N(\b_f|\bmu_f, \S_f)$. We further parameterize $\S_g$ and $\S_f$ by their Cholesky decompositions, $\S_g = \L_g \L_g^\top$ and $\S_f = \L_f \L_f^\top$, to ensure their positive definiteness. We then derive the  EBLO from 
+\begin{align}
+&\Lcal = \EE_{q(\g, \b_g, \f, \b_f)} \log\frac{p(\Scal, \g, \b_g, \f, \b_f, \Ucal)}{q(\g, \b_g, \f, \b_f)} \notag\\
+&=\EE_q \log \frac{p(\b_g)\cancel{p(\g|\b_g)} p(\b_f)\cancel{p(\f|\b_f)}p(\Ucal, \Scal|\f, \g)}{q(\b_g)\cancel{p(\g|\b_g)}q(\b_f) \cancel{p(\f|\b_f)}}. \notag 
+\end{align}
+Now we can see that the full conditional Gaussian distributions $p(\g|\b_g)$ and $p(\f|\b_f)$ are both cancelled. We only need to compute the covariance matrices for $p(\b_g)$ and $p(\b_f)$, which are $m_g\times m_g$ and $m_f \times m_f$, respectively. Hence, the computational cost is greatly reduced. Rearranging the terms, we have 
+\begin{align}
+&\Lcal = \log(p(\Ucal)) -\kl\big(q(\b_g) \| p(\b_g)\big) - \kl\big(q(\b_f)\| p(\b_f)\big) \notag \\
+& - \sum_{\bi} \EE_q\big[\int_0^T \lambda_{\bi}(t) \d t\big] + \sum_{n=1}^N \EE_q\big[\log\big(\lambda_{\bi_n}(s_n)\big)\big], \label{eq:elbo-1}
+\end{align}
+where $p(\Ucal) =\prod_k\prod_{i_k} \N(\u_{i_k}^k|\0, \I)$ and $\kl(\cdot \| \cdot)$ is the Kullbalk Leibler divergence. To handle the intractable integral in \eqref{eq:elbo-1}, we rewrite it as an expectation,  $\int_0^T \lambda_\bi(t) \d t = \EE_{p(t)} [T\lambda_\bi(t)]$ where $p(t) = \mathrm{Uniform}(0, T)$.  Then we can sample $t$ to obtain an unbiased estimate of the integral and conduct stochastic optimization (which we will discuss later). The ELBO now is 
+\begin{align}
+&\Lcal = \log(p(\Ucal)) -\kl\big(q(\b_g) \| p(\b_g)\big) - \kl\big(q(\b_f)\| p(\b_f)\big) \notag \\
+& - \sum_{\bi} \EE_q\EE_{p(t)}[T\lambda_{\bi}(t) ] + \sum_{n=1}^N \EE_q\big[\log\big(\lambda_{\bi_n}(s_n)\big)\big]. \label{eq:elbo-2}
+\end{align}
+
+However, the computation of each rate $\lambda_\bi(t)$ and log rate $\log\big(\lambda_{\bi_n}(s_n)\big)$ is still quite expensive. According to \eqref{eq:raw-rate} and \eqref{eq:rate}, they couple  a summation of the temporal influences (excitation or inhibition) from all the previously happened events in the (scaled) softplus and log-softplus function, and the time complexity is (on average) $\Ocal(N)$. Since we need to compute $N$ log rates, the total complexity is $\Ocal(N^2)$. Therefore, it will be very costly for large $N$. To address this issue, we observe the following fact. 
+\begin{lem}
+	The scaled soft-plus function $\gamma_s(x) = s\log\big(1+\exp({x}/{s})\big)$ ($s>0$) is convex and $log\big(\gamma_s(x)\big)$ is concave. 
+\end{lem}\label{lem:1}
+The proof is given in the supplementary material. Based on this property, we can use Jensen's inequality to further derive an ELBO that fully decomposes these expensive summations. Specifically, we first rewrite the raw rate function \eqref{eq:raw-rate} as 
+\[
+\tlam_{\bi}(t) = \lambda_\bi^0 + \sum_{n=1}^N \delta(s_n<t)h_{\bi_n \rightarrow \bi}(\x_{\bi_n}, \x_{\bi}, t-s_n)
+\]
+where $\delta(\cdot)$ is the indicator function and $h_{\bi_n \rightarrow \bi}(\x_{\bi_n}, \x_{\bi}, t - s_n) = \tanh\big(g(\x_{\bi_n}, \x_{\bi})\big)k(\x_{\bi_n}, \x_{\bi})h_0(t-s_n)$. We then partition the observed events into mini-batches of size $Q$: $\{\Bcal_1, \ldots, \Bcal_{N/Q}\}$, and rearrange the summation as  $
+\tlam_{\bi}(t) = \lambda_\bi^0 + \frac{Q}{N}\sum_{k=1}^{N/Q}\frac{N}{Q} \sum_{n \in \Bcal_k} \delta(s_n<t)h_{\bi_n \rightarrow \bi}(\x_{\bi_n}, \x_{\bi}, t-s_n).$
+Thereby, we can view the raw rate as an expectation, $\tlam_{\bi}(t) = \EE_{p(k)}[X_k^\bi]$ where $p(k) = Q/N$, $k \in \{1, \ldots, N/Q\}$, and 
+\[
+X_k^\bi =  \lambda_\bi^0 + \frac{N}{Q} \sum_{n \in \Bcal_k} \delta(s_n<t)h_{\bi_n \rightarrow \bi}(\x_{\bi_n}, \x_{\bi}, t-s_n).
+\]
+Since the rate $\lambda_\bi(t) = \gamma_s\big(\tlam_{\bi}(t)\big) $ and $\gamma_s(\cdot)$ is convex, we can apply Jensen's inequality to obtain $\lambda_\bi(t)  = \gamma_s(\EE_{p(k)}[X_k^\bi]) \le \EE_{p(k)}[\gamma_s(X_k^\bi)]$
+ and so
+\begin{align}
+-\EE_{q}\EE_{p(t)}[\lambda_\bi(t)] \ge -\EE_{q}\EE_{p(t)}\EE_{p(k)}[\gamma_s(X_k^\bi)]. \label{eq:bound1}
+\end{align}
+Similarly, the raw rate inside each log rate $\lambda_{\bi_n}(s_n)$ can also be viewed as an expectation, $\tlam_{\bi}(s_n) = \EE_{p(k)}[Y_k^n]$, where  
+\[
+Y_k^n =  \lambda_{\bi_n}^0 + \frac{N}{Q} \sum_{j \in \Bcal_k} \delta(s_j<s_n)h_{\bi_j \rightarrow \bi_n}(\x_{\bi_j}, \x_{\bi_n}, s_n-s_j).
+\]
+Since $\log(\gamma_s(\cdot))$ is concave, we can apply Jensen's inequality to obtain
+\begin{align}
+ \log\big(\lambda_{\bi_n}(s_n)\big)  &= \log(\gamma_s(\EE_{p(k)}[Y_k^n])) \notag \\
+ &\ge \EE_{p(k)}[\log(\gamma_s(Y_k^n))]. \label{eq:bound2}
+\end{align}
+
+Finally, we substitute the lower bounds in \eqref{eq:bound1} and \eqref{eq:bound2} for each expected rate and log rate in  \eqref{eq:elbo-2}, respectively. We then obtain a fully decomposed ELBO, 
+\begin{align}
+&\Lcal^+ =  \log(p(\Ucal)) -\kl\big(q(\b_g) \| p(\b_g)\big) - \kl\big(q(\b_f)\| p(\b_f)\big) \notag \\
+& - \sum_{\bi} \EE_q\EE_{p(t)}\EE_{p(k)}[T\gamma_s(X_k^\bi)] + \sum_{n=1}^N \EE_q\EE_{p(k)}[\log(\gamma_s(Y_k^n))]. \label{eq:elbo-3}% \raisetag{0.3in}
+\end{align}
+In this way, we move out most of the summation in each softplus and log softplus function, leaving  only a very light summation across the mini-batch, \ie $X_k^{\bi}$ and $Y_k^n$. The ELBO is additive on the observed entries, events and mini-batch set (via $p(k)$). Thereby, we can develop a stochastic optimization algorithm for efficient model estimation. 
+\vspace{-0.1in}
+\subsection{Stochastic Optimization}
+\vspace{-0.1in}
+We now maximize the ELBO $\Lcal^+$ in \eqref{eq:elbo-3} to estimate the variational posterior $q$, the latent factors $\Ucal$ and the other parameters. This ELBO is not analytical because the expectation terms are for the softplus or log softplus functions and do not have closed forms . Hence, we resort to stochastic optimization. In order to develop an efficient algorithm, we further partition all the observed entries (\ie distinct interactions) into mini-batches of size $C$: $\{\Ccal_1, \ldots, \Ccal_{M/C}\} $, and all the observed events into mini-batches of $D$: $\{\Dcal_1, \ldots, \Dcal_{N/D}\}$. Note that we can also reuse the previous partition of the events,  $\{\Bcal_1, \ldots, \Bcal_{N/Q}\}$. Next, we rearrange  
+\begin{align}
+\Lcal^+ &=  \log(p(\Ucal)) -\kl\big(q(\b_g) \| p(\b_g)\big) - \kl\big(q(\b_f)\| p(\b_f)\big) \notag \\
+& - \sum_{j} \frac{C}{M} \sum_{\bi \in \Ccal_j} \frac{M}{C} \EE_q\EE_{p(t)}\EE_{p(k)}[T\gamma_s(X_k^\bi)] \notag \\
+& + \sum_{l} \frac{D}{N} \sum_{n \in \Dcal_l} \frac{N}{D} \EE_q\EE_{p(k)}[\log(\gamma_s(Y_k^n))].
+\end{align}
+Then we can view the ELBO as an expectation of a stochastic ELBO, 
+\begin{align}
+\Lcal^+ = \EE_{p(k), p(j), p(l)} [\tilde{\Lcal}^+_{k,j,l}] \label{eq:elbo-4}
+\end{align}
+where $p(k) = \frac{Q}{N}$, $k \in \{1, \ldots, \frac{N}{Q}\}$, $p(j) = \frac{C}{M}$, $j \in \{1, \ldots, \frac{M}{C}\}$,  $p(l) = \frac{D}{N}$, $l \in \{1, \ldots, \frac{N}{D}\}$, and 
+\begin{align}
+&\tilde{\Lcal}^+_{k,j,l} = \log(p(\Ucal)) -\kl\big(q(\b_g) \| p(\b_g)\big) - \kl\big(q(\b_f)\| p(\b_f)\big) \notag \\
+& -\EE_q\EE_{p(t)}[T\gamma_s(X_k^\bi)]  +  \EE_q[\log(\gamma_s(Y_k^n))]. \notag 
+\end{align}
+Now with \eqref{eq:elbo-4}, we can develop an efficient stochastic optimization algorithm. Each time, we first draw a mini-batch $\Bcal_k$, $\Ccal_j$ and $\Dcal_l$ from $p(k)$, $p(j)$ and $p(l)$ respectively, and then seek to compute  $\nabla \tilde{\Lcal}^+_{k,j,l}$ as an unbiased estimate of $\nabla \Lcal^+$. However, the expectation term in $ \tilde{\Lcal}^+_{k,j,l}$ is still intractable. To address this issue, we use the reparameterization trick~\citep{kingma2013auto} to generate a parameterized sample for
+ $\b_f$ and each background rate $\lambda_{\bi}^0 = f(\x_\bi)$ in $X_k^{\bi}$ and $Y_k^n$. Since $q(\b_f)$ is Gaussian and $p(f(\x_\bi)|\b_f)$ is conditional Gaussian, it is straightforward to obtain the sample $\tilde{\b}_f = \bmu_f + \L_f \boldeta$ and $\tilde{\lambda}_{\bi}^0 = \mu_{\bi}^0 + \sigma_{\bi}^0\epsilon$, where $\boldeta \sim \N(\0, \I)$, $\epsilon \sim \N(0, 1)$, $\mu_{\bi}^0 = \kappa_f(\x_{\bi}, \Z_f)\kappa_f(\Z_f, \Z_f)^{-1}\tilde{\b}_f$ and $(\sigma_{\bi}^0)^2 = \kappa_f(\x_{\bi}, \x_{\bi}) - \kappa_f(\x_{\bi}, \Z_f)\kappa_f(\Z_f, \Z_f)^{-1}\kappa_f(\Z_f, \x_{\bi})$. Similarly, we can generate parameterized samples for $\b_g$ and each $g(\x_{\bi_n}, \x_{\bi})$ in $X_k^{\bi}$ and $Y_k^n$. We then generate a sample for $t$ from $p(t)$. Now, we substitute all the parameterized samples for the corresponding random variables in $X_k^{\bi}$ and $Y_k^n$, and obtain an unbiased stochastic estimate of $\tilde{\Lcal}^+_{k,j,l}$. We then compute its gradient to obtain the an unbiased estimate of $\nabla \tilde{\Lcal}^+_{k,j,l}$, which in turn is an unbiased estimate of $\nabla \Lcal^+$. We now can apply any stochastic optimization algorithm to maximize $\Lcal^+$ with the stochastic gradient. Note that the computation of the stochastic gradient is only inside the sampled mini-batches. Therefore, the cost is greatly reduced.  
+\vspace{-0.1in}
+\subsection{Algorithm Complexity}
+\vspace{-0.05in}
+The time complexity of our inference is $\Ocal\big( Q(C + D)m_g^3 + (C+D)m_f^3\big)$ where $Q$, $C$ and $D$ are the mini-batch sizes of the three partitions. Therefore,  the computational cost is proportional to the mini-batch sizes, rather than determined by the total number of entries $M$ and events $N$. The space complexity is $\Ocal (m_g^2 + m_f^2 + \sum_{k=1}^Kd_k r_k )$, which is to store the prior and posterior matrices for the pseudo outputs $\b_g$ and $\b_f$ and the latent factors $\Ucal$. 

@@ -1,0 +1,176 @@
+%%%%%%%% ICML 2018 EXAMPLE LATEX SUBMISSION FILE %%%%%%%%%%%%%%%%%
+
+\documentclass{article}
+% Recommended, but optional, packages for figures and better typesetting:
+\usepackage{microtype}
+\usepackage{graphicx}
+
+\usepackage{booktabs} % for professional tables
+
+% For citations
+\usepackage{natbib}
+\usepackage{amssymb, amsmath,amsthm}
+\usepackage{amsfonts}
+% For algorithms
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{paralist}
+\usepackage{multirow}
+% Added by Author
+% use Times
+\usepackage{times}
+% For figures
+\usepackage{wrapfig}
+%\usepackage[authoryear]{natbib}
+
+% For algorithms
+\usepackage{url,enumerate}
+\usepackage{color,xcolor}
+\usepackage{epsfig,wrapfig}
+\usepackage{makeidx}  % allows for indexgeneration
+\usepackage{amsmath,amssymb}
+\usepackage[small, compact]{titlesec}
+\usepackage{xspace}
+\usepackage{epstopdf}
+\usepackage{cite}
+% For algorithms
+\usepackage{mathrsfs}
+\usepackage{times}
+\usepackage{enumerate}
+\usepackage{color}
+\usepackage{graphicx,epsfig}
+\usepackage{amsmath,amssymb,xspace}
+\usepackage{url}
+
+\usepackage{hyperref}
+\usepackage{bm}
+\usepackage{bbm}
+\usepackage{upgreek}
+\usepackage{cleveref}
+\usepackage{multirow}
+\usepackage{makecell}
+\usepackage{tabularx}
+\usepackage{subcaption}
+
+\usepackage{siunitx}
+\sisetup{per-mode=reciprocal}
+
+% hyperref makes hyperlinks in the resulting PDF.
+% If your build breaks (sometimes temporarily if a hyperlink spans a page)
+% please comment out the following usepackage line and replace
+% \usepackage{icml2018} with \usepackage[nohyperref]{icml2018} above.
+\usepackage{hyperref}
+
+% Attempt to make hyperref and algorithmic work together better:
+\newcommand{\theHalgorithm}{\arabic{algorithm}}
+
+% Use the following line for the initial blind version submitted for review:
+%\usepackage{icml2018}
+
+% If accepted, instead use the following line for the camera-ready submission:
+%\usepackage[accepted]{icml2018}
+
+% The \icmltitle you define below is probably too long as a header.
+% Therefore, a short form for the running title is supplied here:
+%\icmltitlerunning{Scalable Nonparametric Event-Tensor Decomposition}
+
+
+\newcommand{\ours}{{{SMIE}}\xspace}
+%\newcommand{\ours}{{\textsc{DiTucker}}\xspace}
+\newcommand{\oursw}{\textsc{Ours}\ensuremath{_{\textrm{W}}}\xspace}
+\newcommand{\oursu}{\textsc{Ours}\ensuremath{_{\textrm{U}}}\xspace}
+\newcommand{\oursg}{\textsc{Ours}\ensuremath{_{\textrm{G}}}\xspace}
+%\newcommand{\hadoop}{{Hadoop}\xspace}
+\newcommand{\hadoop}{\textsc{Hadoop}\xspace}
+\newcommand{\mapreduce}{\textsc{MapReduce}\xspace}
+\newcommand{\spark}{\textsc{SPARK}\xspace}
+\newcommand{\map}{\textsc{Map}\xspace}
+\newcommand{\mapper}{\textsc{Mapper}\xspace}
+\newcommand{\mappers}{\textsc{Mappers}\xspace}
+\newcommand{\reduce}{\textsc{Reduce}\xspace}
+\newcommand{\reducer}{\textsc{Reducer}\xspace}
+\newcommand{\InfTuckerEx}{{InfTuckerEx}\xspace}
+\newcommand{\InfTucker}{{InfTucker}\xspace}
+\newcommand{\tucker}[1]{[\![#1]\!]}
+\newcommand{\cbr}[1]{\left\{#1\right\}}
+\newcommand{\myspan}[1]{\mathrm{span}\cbr{#1}}
+\newcommand{\zsdcaa}[1]{[\textcolor{blue}{zhe's comment: #1}]}
+\newcommand{\alanc}[1]{}
+\newcommand{\expec}[2]{\EE_{{#1}}\sbr{{#2}}}
+\newcommand{\oline}[1]{{\overline{#1}}}
+\newcommand{\email}[1]{\href{mailto:#1}{#1}}
+\newcommand{\zsdc}[1]{}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{corollary}{Corollary}[theorem]
+\newtheorem{lem}[theorem]{Lemma}
+
+
+\input{emacscomm.tex}
+\begin{document}
+\section*{Supplementary Materials}%\maketitle
+
+\section{Proof of Lemma 4.1}
+\noindent \textbf{Lemma 4.1.} The scaled soft-plus function $\gamma_s(x) = s\log\big(1+\exp({x}/{s})\big)$ ($s>0$) is convex and $\log\big(\gamma_s(x)\big)$ is concave. 
+
+\begin{proof}
+Since $s$ is a positive constant, we only need to show that the soft-plus function $\gamma(x) = \gamma_1(x)$ is convex and log concave. Then it is straightforward to show that the scaled version is also convex and log concave.  To this end, we first observe that 
+\[
+\gamma(x) = \log\big(1+\exp(x)\big) = -\log\big(\sigma(-x)\big)
+\]
+where $\sigma(x) = 1/\big(1+\exp(-x)\big)$ is the sigmoid activation function. We then take the gradient of $\gamma(x)$, 
+\begin{align}
+\frac{\d \gamma(x)}{\d x} = -\frac{1}{\sigma(-x)} \sigma(-x)(1-\sigma(-x))(-1) = \sigma(x). \label{eq:grad}
+\end{align}
+Note that we have used a known fact that $\frac{\d \sigma(x)}{\d x} = \sigma(x)\big(1-\sigma(x)\big)$. Next, we take the second derivative, 
+\[
+\frac{\d^2 \gamma(x)}{\d x^2} = \sigma(x)(1-\sigma(x)).
+\]
+Since $\forall x \in \mathbb{R}$, we have $0\le \sigma(x) \le 1$, we must have $\frac{\d^2 \gamma(x)}{\d x^2} \ge 0$. Therefore, $\gamma(x)$ is convex. 
+
+Now, let us look at $h(x) = \log\big(\gamma(x)\big)$. First, we can derive the first derivative based on \eqref{eq:grad}, 
+\[
+\frac{\d h(x)}{\d x} = \frac{1}{\gamma(x)} \frac{\d \gamma(x)}{\d x} = \frac{\sigma(x)}{\gamma(x)}.
+\]
+Then, the second derivative is 
+\begin{align}
+\frac{\d^2 h(x)}{\d x^2} = \frac{\frac{\d \sigma(x)}{\d x}\gamma(x) - \sigma(x)\frac{\d \gamma(x)}{\d x}}{\big(\gamma(x)\big)^2} = \frac{\sigma(x)\cdot g(x)}{\big(\gamma(x)\big)^2} \label{eq:2nd}
+\end{align}
+where 
+\[
+g(x) = \big(1-\sigma(x)\big)\gamma(x) - \sigma(x).
+\]
+From \eqref{eq:2nd}, we can see that $\sigma(x) \ge 0$ and $\big(\gamma(x)\big)^2\ge 0$. Therefore, we only need to check if $g(x)\le 0$ to show the concavity of $h(\cdot)$. Since $\gamma(x) = -\log\big(\sigma(-x)\big) = -\log\big(1-\sigma(x)\big)$, we can view $g(x)$ as a function of $t = 1-\sigma(x)$, namely, 
+\[
+g(x) = g(t) = -t \log(t) - (1 - t) = t(1-\log(t)) - 1, 
+\]
+and $0 \le t \le 1$. Note that $g(t) = 0$ when $t=1$. We take the derivative of $g(\cdot)$ w.r.t $t$, 
+\[
+\frac{\d g(t)}{\d t} = 1 - \log(t) + t(-\frac{1}{t}) = -\log(t) \ge 0.
+\]
+Therefore, $g(t)$ is monotonically increasing with $t$. Since $0 \le t \le 1$, we always have $g(t) \le g(t = 1) = 0$. Hence, $\forall x, g(x) \le 0$. From \eqref{eq:2nd}, we have $\frac{\d^2 h(x)}{\d x^2} \le 0$, and hence the log soft-plus function is concave. 
+
+\end{proof}
+
+
+%\bibliographystyle{apalike}
+%\bibliography{SMIE}
+
+% this must go after the closing bracket ] following \twocolumn[ ...
+
+% This command actually creates the footnote in the first column
+% listing the affiliations and the copyright notice.
+% The command takes one argument, which is text to display at the start of the footnote.
+% The \icmlEqualContribution command is standard text for equal contribution.
+% Remove it (just {}) if you do not need this facility.
+
+%\printAffiliationsAndNotice{}  % leave blank if no need to mention equal contribution
+%\printAffiliationsAndNotice{\icmlEqualContribution} % otherwise use the standard text.
+
+
+
+
+\end{document}
+
+
+

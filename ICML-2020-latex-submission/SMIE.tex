@@ -1,0 +1,144 @@
+%%%%%%%% ICML 2020 EXAMPLE LATEX SUBMISSION FILE %%%%%%%%%%%%%%%%%
+
+\documentclass{article}
+
+% Recommended, but optional, packages for figures and better typesetting:
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{booktabs} % for professional tables
+
+% For citations
+\usepackage{natbib}
+\usepackage{amssymb, amsmath,amsthm}
+\usepackage{amsfonts}
+% For algorithms
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{paralist}
+\usepackage{multirow}
+% Added by Author
+% use Times
+\usepackage{times}
+% For figures
+\usepackage{wrapfig}
+%\usepackage[authoryear]{natbib}
+
+% For algorithms
+\usepackage{url,enumerate}
+\usepackage{color,xcolor}
+\usepackage{makeidx}  % allows for indexgeneration
+\usepackage{amsmath,amssymb}
+\usepackage{mathtools}
+\usepackage[small, compact]{titlesec}
+\usepackage{xspace}
+\usepackage{epstopdf}
+\usepackage{cite}
+% For algorithms
+\usepackage{mathrsfs}
+\usepackage{times}
+\usepackage{enumerate}
+\usepackage{color}
+\usepackage{graphicx,epsfig}
+\usepackage{amsmath,amssymb,xspace}
+\usepackage{url}
+%\usepackage{subfigure}
+\usepackage{hyperref}
+\usepackage{bm}
+\usepackage{bbm}
+\usepackage{upgreek}
+\usepackage{cleveref}
+\usepackage{multirow}
+\usepackage{ulem}
+\usepackage{cancel}
+%\usepackage{subfig}
+\usepackage{subcaption}
+
+% hyperref makes hyperlinks in the resulting PDF.
+% If your build breaks (sometimes temporarily if a hyperlink spans a page)
+% please comment out the following usepackage line and replace
+% \usepackage{icml2018} with \usepackage[nohyperref]{icml2018} above.
+\usepackage{hyperref}
+
+% Attempt to make hyperref and algorithmic work together better:
+\newcommand{\theHalgorithm}{\arabic{algorithm}}
+
+% Use the following line for the initial blind version submitted for review:
+\usepackage{icml2020}
+
+% If accepted, instead use the following line for the camera-ready submission:
+%\usepackage[accepted]{icml2018}
+
+% The \icmltitle you define below is probably too long as a header.
+% Therefore, a short form for the running title is supplied here:
+\icmltitlerunning{Self-Modulating Nonparametric  Event-Tensor Factorization}
+
+
+\newcommand{\ours}{{{our model}}\xspace}
+%\newcommand{\ours}{{\textsc{DiTucker}}\xspace}
+\newcommand{\oursw}{\textsc{Ours}\ensuremath{_{\textrm{W}}}\xspace}
+\newcommand{\oursu}{\textsc{Ours}\ensuremath{_{\textrm{U}}}\xspace}
+\newcommand{\oursg}{\textsc{Ours}\ensuremath{_{\textrm{G}}}\xspace}
+%\newcommand{\hadoop}{{Hadoop}\xspace}
+\newcommand{\hadoop}{\textsc{Hadoop}\xspace}
+\newcommand{\mapreduce}{\textsc{MapReduce}\xspace}
+\newcommand{\spark}{\textsc{SPARK}\xspace}
+\newcommand{\map}{\textsc{Map}\xspace}
+\newcommand{\mapper}{\textsc{Mapper}\xspace}
+\newcommand{\mappers}{\textsc{Mappers}\xspace}
+\newcommand{\reduce}{\textsc{Reduce}\xspace}
+\newcommand{\reducer}{\textsc{Reducer}\xspace}
+\newcommand{\InfTuckerEx}{{InfTuckerEx}\xspace}
+\newcommand{\InfTucker}{{InfTucker}\xspace}
+\newcommand{\tucker}[1]{[\![#1]\!]}
+\newcommand{\cbr}[1]{\left\{#1\right\}}
+\newcommand{\myspan}[1]{\mathrm{span}\cbr{#1}}
+\newcommand{\zsdcaa}[1]{[\textcolor{blue}{zhe's comment: #1}]}
+\newcommand{\alanc}[1]{}
+\newcommand{\expec}[2]{\EE_{{#1}}\sbr{{#2}}}
+\newcommand{\oline}[1]{{\overline{#1}}}
+\newcommand{\email}[1]{\href{mailto:#1}{#1}}
+\newcommand{\zsdc}[1]{}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{corollary}{Corollary}[theorem]
+\newtheorem{lem}[theorem]{Lemma}
+\newcommand{\Wei}[1]{{\color{blue}#1}}
+
+
+\input{emacscomm.tex}
+
+
+\begin{document}
+
+\twocolumn[
+\icmltitle{Self-Modulating Nonparametric Event-Tensor Factorization}
+
+
+\vskip 0.3in
+]
+
+
+\input{./abstract}		
+\input{./intro}
+\input{./model}
+\input{./related}
+\input{./exp}
+\input{./conclusion}
+
+
+
+\bibliographystyle{apalike}
+\bibliography{SMIE}
+\end{document}
+
+
+% This document was modified from the file originally made available by
+% Pat Langley and Andrea Danyluk for ICML-2K. This version was created
+% by Iain Murray in 2018. It was modified from a version from Dan Roy in
+% 2017, which was based on a version from Lise Getoor and Tobias
+% Scheffer, which was slightly modified from the 2010 version by
+% Thorsten Joachims & Johannes Fuernkranz, slightly modified from the
+% 2009 version by Kiri Wagstaff and Sam Roweis's 2008 version, which is
+% slightly modified from Prasad Tadepalli's 2007 version which is a
+% lightly changed version of the previous year's version by Andrew
+% Moore, which was in turn edited from those of Kristian Kersting and
+% Codrina Lauth. Alex Smola contributed to the algorithmic style files.
